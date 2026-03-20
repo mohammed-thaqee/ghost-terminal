@@ -1,25 +1,23 @@
 #!/bin/bash
 
-# Ensure script is sourced, not executed
+# Ensure sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "[!] Please run using:"
+    echo "[!] Run using:"
     echo "source <(curl -sL https://raw.githubusercontent.com/mohammed-thaqee/ghost-terminal/main/ghost.sh)"
     exit 1
 fi
 
+BASE_URL="https://raw.githubusercontent.com/mohammed-thaqee/ghost-terminal/main"
+
 echo "[*] Initializing Ghost Terminal..."
 
 # =========================
-# 👻 GHOST MODE ENABLE
+# 👻 GHOST MODE
 # =========================
 enable_ghost_mode() {
-    echo "[*] Engaging Ghost Mode..."
-
-    # Clear existing history
     history -c
     history -w
 
-    # Disable history recording
     unset HISTFILE
     export HISTSIZE=0
     export HISTFILESIZE=0
@@ -28,41 +26,44 @@ enable_ghost_mode() {
     export HISTCONTROL=ignoreboth
     export HISTIGNORE="*"
 
-    echo "[✔] History wiped and disabled"
+    echo "[✔] Ghost mode active"
 }
 
 # =========================
-# 🧹 CLEANUP FUNCTION
+# 🧠 TERMINAL DETECTOR
 # =========================
-cleanup() {
-    echo ""
-    echo "[!] Cleaning up session..."
+spawn_terminal() {
+    CMD="$1"
 
-    # Clear history again
-    history -c
-    history -w
-
-    echo "[✔] Session cleared"
+    if command -v gnome-terminal &> /dev/null; then
+        gnome-terminal -- bash -c "$CMD; exec bash"
+    elif command -v xterm &> /dev/null; then
+        xterm -e "$CMD" &
+    else
+        echo "[!] No supported terminal found. Running inline..."
+        eval "$CMD" &
+    fi
 }
 
-# Trap exit signals
-trap cleanup EXIT INT TERM
+# =========================
+# 📦 MODULE LOADER
+# =========================
+run_module() {
+    MODULE_NAME="$1"
 
-# Activate ghost mode
+    spawn_terminal "bash <(curl -sL $BASE_URL/modules/$MODULE_NAME)"
+}
+
+# =========================
+# 🚀 EXECUTION
+# =========================
 enable_ghost_mode
 
-# =========================
-# 🧠 TEST FUNCTION
-# =========================
-ghost_test() {
-    echo "👻 Ghost Mode is ACTIVE"
-}
+echo "[*] Launching modules..."
 
-echo ""
-echo "=================================="
-echo "   👻 GHOST TERMINAL ACTIVE"
-echo "=================================="
-echo "[*] Try running commands"
-echo "[*] Then type: history"
-echo "[*] Type 'exit' to quit"
-echo ""
+# Run modules in parallel terminals
+run_module "visuals.sh"
+run_module "oneko.sh"
+
+echo "[✔] All modules launched"
+echo "[✔] You can continue using this terminal"
