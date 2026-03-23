@@ -7,19 +7,21 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     exit 1
 fi
 
-BASE_URL="https://raw.githubusercontent.com/mohammed-thaqee/ghost-terminal/main"
-
 echo "[*] Initializing Ghost Terminal..."
 
 # =========================
-# 🔐 SINGLE SUDO AUTH
+# 🔐 GET SUDO PASSWORD ONCE
 # =========================
-echo "[*] Requesting elevated access..."
-sudo -v
+echo "[*] Enter sudo password:"
+read -s SUDO_PASS
+echo ""
 
-# Keep sudo alive in background
-( while true; do sudo -n true; sleep 60; done ) &
-SUDO_KEEP_ALIVE_PID=$!
+echo "$SUDO_PASS" | sudo -S -v >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "[✘] Incorrect password"
+    unset SUDO_PASS
+    return 1
+fi
 
 # =========================
 # 👻 GHOST MODE
@@ -35,14 +37,13 @@ enable_ghost_mode() {
 
     export HISTCONTROL=ignoreboth
     export HISTIGNORE="*"
-
-    echo "[✔] Ghost mode active"
 }
 
 # =========================
 # 🎭 CUSTOM PROMPT
 # =========================
 set_prompt() {
+    export ORIGINAL_PS1="$PS1"
     export PS1="agent@system > "
 }
 
@@ -62,21 +63,64 @@ spawn_terminal() {
 }
 
 # =========================
-# 📦 MODULE INSTALLER (BACKGROUND)
+# 📊 SIMULATED PROGRESS
 # =========================
-install_module() {
-    MODULE="$1"
+simulate_progress() {
+    packages=("cmatrix" "figlet" "lolcat" "oneko")
+    total=${#packages[@]}
+    progress=0
 
+    for pkg in "${packages[@]}"; do
+        echo "[*] Downloading $pkg..."
+
+        for i in {1..5}; do
+            progress=$((progress + (100 / (total * 5))))
+            printf "\r[%-50s] %d%%" "$(printf '#%.0s' $(seq 1 $((progress/2))))" "$progress"
+            sleep 0.2
+        done
+
+        echo -e "\n[✔] $pkg installed"
+    done
+
+    echo -e "\n[✔] All packages ready (100%)"
+}
+
+# =========================
+# 📦 PARALLEL INSTALL
+# =========================
+parallel_install() {
+    echo "[*] Installing dependencies..."
+
+    echo "$SUDO_PASS" | sudo -S apt-get update -y >/dev/null 2>&1
+
+    # Real installs in background
+    for pkg in cmatrix figlet lolcat oneko; do
+        echo "$SUDO_PASS" | sudo -S apt-get install -y $pkg >/dev/null 2>&1 &
+    done
+
+    # Visual installer
     spawn_terminal "
-        echo '[*] Installing $MODULE...';
-        bash <(curl -sL $BASE_URL/modules/$MODULE);
-        echo '[✔] Done';
+        $(declare -f simulate_progress)
+        simulate_progress
         sleep 1
+    "
+
+    wait
+
+    echo "[✔] All packages installed"
+}
+
+# =========================
+# 🐱 ONEKO
+# =========================
+run_oneko() {
+    spawn_terminal "
+        oneko -tora;
     "
 }
 
 # =========================
-# 🎬 VISUALS (MAIN TERMINAL)
+# 🎬 VISUALS
 # =========================
 run_visuals_main() {
     clear
@@ -87,9 +131,6 @@ run_visuals_main() {
     sleep 0.5
     echo "[ OK ] Launching Ghost Interface..."
     sleep 0.5
-
-    # Ensure tools installed (silent)
-    sudo apt-get install -y cmatrix figlet lolcat >/dev/null 2>&1
 
     echo ""
     echo "[*] Loading..."
@@ -106,18 +147,49 @@ run_visuals_main() {
 }
 
 # =========================
-# 🧹 CLEANUP
+# 💣 MAYDAY (FULL PURGE)
 # =========================
-cleanup() {
+mayday() {
     echo ""
-    echo "[!] Cleaning up..."
+    echo "[!!!] MAYDAY INITIATED"
+    echo "[*] Purging system..."
 
-    kill $SUDO_KEEP_ALIVE_PID 2>/dev/null
+    pkill oneko 2>/dev/null
+    kill $INSTALL_PID 2>/dev/null
+
+    echo "$SUDO_PASS" | sudo -S apt-get remove -y cmatrix figlet lolcat oneko >/dev/null 2>&1
+    echo "$SUDO_PASS" | sudo -S apt-get autoremove -y >/dev/null 2>&1
+
+    export HISTFILE=~/.bash_history
+    export HISTSIZE=1000
+    export HISTFILESIZE=2000
+    set -o history
 
     history -c
     history -w
 
-    echo "[✔] Session cleared"
+    export PS1="$ORIGINAL_PS1"
+
+    unset SUDO_PASS
+
+    echo "[✔] System restored"
+    echo "[✔] No trace remains"
+
+    reset
+    clear
+
+    return
+}
+
+alias mayday=mayday
+
+# =========================
+# 🧹 CLEANUP
+# =========================
+cleanup() {
+    history -c
+    history -w
+    unset SUDO_PASS
 }
 
 trap cleanup EXIT INT TERM
@@ -128,13 +200,15 @@ trap cleanup EXIT INT TERM
 enable_ghost_mode
 set_prompt
 
-# Spawn installers in background terminals
-install_module "visuals.sh"
-install_module "oneko.sh"
+parallel_install &
+INSTALL_PID=$!
 
-# Run visuals in MAIN terminal
 run_visuals_main
 
+wait $INSTALL_PID
+
+run_oneko
+
 echo ""
-echo "[*] Modules installing in background..."
-echo "[*] You can continue using this terminal"
+echo "[✔] System fully operational"
+echo "[*] Type 'mayday' for emergency purge"
