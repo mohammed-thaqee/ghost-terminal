@@ -193,29 +193,57 @@ _ghost_acquire_sudo() {
 #  PARALLEL PACKAGE INSTALLATION
 # ════════════════════════════════════════════════════════════════
 
-_ghost_install_pkg_worker() {
-  # Called as background worker for each package
-  # Usage: _ghost_install_pkg_worker <pkg> <passfile> <statusdir>
-  local pkg=$1 passfile=$2 statusdir=$3
-  local statusfile="${statusdir}/${pkg}"
+_ghost_write_worker_script() {
+  # Write a self-contained worker script to tmpfs for each package.
+  # Background subshells do NOT inherit shell functions, so we write
+  # real scripts that can be executed independently.
+  local pkg=$1 passfile=$2 statusfile=$3
+  local worker="${_GHOST_TMPDIR}/worker_${pkg}.sh"
 
-  echo "INSTALLING" > "$statusfile"
+  cat > "$worker" <<WORKER
+#!/usr/bin/env bash
+# Ghost worker: install ${pkg}
+PASSFILE='${passfile}'
+STATUSFILE='${statusfile}'
+PKG='${pkg}'
 
-  local pass
-  pass=$(cat "$passfile")
+echo "INSTALLING" > "\$STATUSFILE"
 
-  local apt_cmd
-  if [[ "$pass" == "__cached__" ]]; then
-    apt_cmd="sudo apt-get install -y $pkg"
+# Fast-path: already installed — no apt needed
+if dpkg -s "\$PKG" &>/dev/null 2>&1; then
+  echo "DONE" > "\$STATUSFILE"
+  exit 0
+fi
+
+# Read credential
+PASS=\$(cat "\$PASSFILE" 2>/dev/null)
+
+if [[ "\$PASS" == "__cached__" ]]; then
+  # Sudo already cached — just run directly
+  sudo apt-get install -y -q "\$PKG" &>/dev/null
+  RC=\$?
+else
+  # Refresh sudo timestamp first (handles parallel workers racing on the ticket)
+  echo "\$PASS" | sudo -S -v &>/dev/null
+  # Now install — sudo ticket is fresh for this worker
+  echo "\$PASS" | sudo -S apt-get install -y -q "\$PKG" &>/dev/null
+  RC=\$?
+fi
+
+if [[ \$RC -eq 0 ]]; then
+  echo "DONE" > "\$STATUSFILE"
+else
+  # One retry: sometimes apt lock clears after a moment
+  sleep 3
+  if [[ "\$PASS" == "__cached__" ]]; then
+    sudo apt-get install -y -q "\$PKG" &>/dev/null && echo "DONE" > "\$STATUSFILE" || echo "FAILED" > "\$STATUSFILE"
   else
-    apt_cmd="echo '$pass' | sudo -S apt-get install -y $pkg"
+    echo "\$PASS" | sudo -S apt-get install -y -q "\$PKG" &>/dev/null && echo "DONE" > "\$STATUSFILE" || echo "FAILED" > "\$STATUSFILE"
   fi
-
-  if eval "$apt_cmd" &>/dev/null; then
-    echo "DONE" > "$statusfile"
-  else
-    echo "FAILED" > "$statusfile"
-  fi
+fi
+WORKER
+  chmod 700 "$worker"
+  echo "$worker"
 }
 
 _ghost_install_all_packages() {
@@ -225,42 +253,52 @@ _ghost_install_all_packages() {
   _ghost_log "Deploying packages in parallel: ${_GHOST_PKGS[*]}"
   echo
 
-  # Export vars needed by subshells
-  export _GHOST_PASSFILE _GHOST_TMPDIR
-
-  # Launch one worker per package
-  local pids=()
+  # Pre-seed status files and write per-package worker scripts
+  local worker_pids=()
+  local stagger=0
   for pkg in "${_GHOST_PKGS[@]}"; do
-    _ghost_install_pkg_worker "$pkg" "$_GHOST_PASSFILE" "$statusdir" &
-    pids+=($!)
+    local statusfile="${statusdir}/${pkg}"
+    echo "QUEUED" > "$statusfile"
+
+    local worker
+    worker=$(_ghost_write_worker_script "$pkg" "$_GHOST_PASSFILE" "$statusfile")
+
+    # Stagger launches by 1s to avoid apt lock collisions between workers
+    ( sleep "$stagger"; bash "$worker" ) &
+    worker_pids+=($!)
+    (( stagger++ )) || true
   done
 
-  # Launch the progress terminal (shows animated progress bars)
+  # Write and launch the progress terminal
   local prog_script="${_GHOST_TMPDIR}/progress.sh"
   _ghost_write_progress_script "$prog_script" "$statusdir"
   chmod +x "$prog_script"
-  _ghost_spawn_terminal "Ghost :: Package Deployment" "bash '$prog_script'"
+  _ghost_spawn_terminal "Ghost :: Package Deployment" "bash '${prog_script}'"
 
   # Wait for all workers to finish
-  for pid in "${pids[@]}"; do
+  for pid in "${worker_pids[@]}"; do
     wait "$pid" 2>/dev/null
   done
 
-  # Signal ready
+  # Signal ready for main thread
   touch "$_GHOST_READY_FLAG"
 
-  # Verify installs
+  # Final verification summary
   local all_ok=true
   for pkg in "${_GHOST_PKGS[@]}"; do
     local status
     status=$(cat "${statusdir}/${pkg}" 2>/dev/null || echo "UNKNOWN")
     if [[ "$status" == "DONE" ]]; then
-      _ghost_ok "$pkg installed"
-    elif dpkg -l "$pkg" &>/dev/null; then
-      _ghost_ok "$pkg already present"
+      _ghost_ok "$pkg — ready"
     else
-      _ghost_warn "$pkg — ${status}"
-      all_ok=false
+      # Last-chance check: package might have been installed before this session
+      if dpkg -s "$pkg" &>/dev/null 2>&1; then
+        _ghost_ok "$pkg — already present"
+        echo "DONE" > "${statusdir}/${pkg}"
+      else
+        _ghost_warn "$pkg — ${status}"
+        all_ok=false
+      fi
     fi
   done
 
