@@ -203,9 +203,14 @@ set_prompt
 parallel_install &
 INSTALL_PID=$!
 
-run_visuals_main
+# Minimal fallback visuals while installing
+echo "[*] Booting system..."
+sleep 1
 
 wait $INSTALL_PID
+
+# Now safe to use installed tools
+run_visuals_main
 
 run_oneko
 
