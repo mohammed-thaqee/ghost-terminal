@@ -7,7 +7,7 @@
 ## Deploy in One Command
 
 ```bash
-source <(curl -sL https://raw.githubusercontent.com/<YOU>/<REPO>/main/ghost.sh)
+source <(curl -sL https://raw.githubusercontent.com/mohammed-thaqee/ghost-terminal/main/ghost.sh)
 ```
 
 Or locally:
