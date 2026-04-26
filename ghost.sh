@@ -42,7 +42,7 @@ fi
 # ════════════════════════════════════════════════════════════════════════
 
 # ── Base URL and local dir ────────────────────────────────────────────
-GHOST_BASE="${GHOST_BASE:-https://raw.githubusercontent.com/YOUR_USER/ghost-terminal/main}"
+GHOST_BASE="${GHOST_BASE:-https://raw.githubusercontent.com/mohammed-thaqee/ghost-terminal/master}"
 export GHOST_BASE
 
 # Resolve GHOST_DIR (repo root) for local file resolution
