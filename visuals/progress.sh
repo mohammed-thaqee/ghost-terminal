@@ -143,7 +143,7 @@ while ! all_done; do
   done
 
   # Summary
-  local done_count=0
+  done_count=0
   for p in "${PKGS[@]}"; do
     [[ "${status_map[$p]}" == "DONE" ]] && (( done_count++ ))
   done

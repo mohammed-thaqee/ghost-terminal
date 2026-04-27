@@ -149,19 +149,27 @@ ghost_main() {
   # 8. Wait for cosmetic installs before launching visuals
   wait "$_install_pid" 2>/dev/null
 
-  # 9. Visual fx (cmatrix window, oneko — display required)
+  # 9. Visual fx (cmatrix window — display required)
   ghost_run_cmatrix
   sleep 0.5
 
   # 10. Hand off to zsh
-  #     export ZDOTDIR so zsh reads configs from tmpdir, not ~/
-  #     exec replaces this bash process — nothing after this line runs
+  #     ZDOTDIR tells zsh to read .zshrc from tmpdir, not ~/
+  #     We use 'zsh' subprocess NOT 'exec zsh' because:
+  #       exec zsh terminates the shell when sourced via <(curl ...)
+  #       since the process substitution fd is still open at exec time.
+  #       subprocess zsh works correctly in both local and curl contexts.
   export ZDOTDIR="$GHOST_TMPDIR"
 
-  gh_info "Handing off to zsh (ZDOTDIR=${GHOST_TMPDIR})"
-  sleep 0.3
+  gh_info "Launching zsh session (ZDOTDIR=${GHOST_TMPDIR})"
+  sleep 0.2
 
-  exec zsh
+  # Blocks here until user exits zsh or mayday fires
+  zsh
+
+  # Post-session safety net (reached after plain 'exit', not mayday)
+  printf '\n\033[2m[ghost] Zsh session ended.\033[0m\n'
+  unset ZDOTDIR
 }
 
 # ── Config deployment ─────────────────────────────────────────────────
