@@ -42,8 +42,16 @@ _BIN_PATTERN[btop]="x86_64-linux-musl\\.tbz$"
 _BIN_INNER[btop]="btop/bin/btop"
 _BIN_EXTRACT[btop]="tar"
 
+# zsh — portable shell, core dependency
+# romkatv/zsh-bin provides fully static musl builds
+_BIN_REPO[zsh]="romkatv/zsh-bin"
+_BIN_PATTERN[zsh]="zsh-[0-9].*-linux-x86_64\.tar\.gz$"
+_BIN_INNER[zsh]="usr/bin/zsh"
+_BIN_EXTRACT[zsh]="tar"
+
 # Tool display order
-_GHOST_BIN_TOOLS=(fzf bat lsd btop)
+# zsh first — session cannot start without it
+_GHOST_BIN_TOOLS=(zsh fzf bat lsd btop)
 
 # ── Helpers ───────────────────────────────────────────────────────────
 

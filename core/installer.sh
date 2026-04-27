@@ -3,6 +3,7 @@
 # ║  core/installer.sh  —  Cosmetic package installer                   ║
 # ║                                                                      ║
 # ║  ONLY installs: cmatrix figlet lolcat oneko                         ║
+# ║  zsh is handled by core/binaries.sh as a portable static binary     ║
 # ║  These are visual/optional — mayday purges them.                    ║
 # ║                                                                      ║
 # ║  Daily tools (lsd bat fzf btop) are handled by core/binaries.sh     ║

@@ -3,7 +3,7 @@
 # ║  carry.sh  —  USB Population Script                                 ║
 # ║                                                                      ║
 # ║  Run this ONCE on your own machine to pre-populate your USB         ║
-# ║  stick with all binaries. After this, ghost.sh works fully          ║
+# ║  stick with all binaries including a portable zsh. After this,      ║
 # ║  offline from the USB — no network needed at the lab.               ║
 # ║                                                                      ║
 # ║  Usage:  bash carry.sh /media/your-usb                              ║
@@ -72,7 +72,7 @@ fetch_latest() {
 }
 
 # ════════════════════════════════════════════════════════════════════════
-banner "Static binaries"
+banner "Static binaries  (fzf · bat · lsd · btop · zsh)"
 # ════════════════════════════════════════════════════════════════════════
 
 fetch_latest \
